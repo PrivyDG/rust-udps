@@ -1,6 +1,6 @@
 [package]
 name = "rust-udps"
-version = "0.1.1"
+version = "0.2.0-alpha"
 authors = ["Daniel Wanner <daniel.wanner@tubber.xyz>"]
 edition = "2018"
 publish = false
@@ -8,8 +8,12 @@ publish = false
 [lib]
 name = "udps"
 path = "src/lib.rs"
-crate-type = ["dylib"]
+crate-type = ["cdylib"]
 
 [[example]]
 name = "server"
 crate-type = ["bin"]
+
+[dependencies]
+rand = "0.6.3"
+byteorder = "1.2.7"

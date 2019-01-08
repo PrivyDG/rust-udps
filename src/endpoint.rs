@@ -30,11 +30,15 @@ impl Endpoint {
     }
 
     /**
-     * 
+     * Connect to a serving UDPS endpoint
      */
     pub fn connect(&self, addr: String, buffer_size: i32) -> Result<(), Error> {
-
+        Err(
+            "Error: Not implemented!".to_string()
+        )
     }
+
+    
 
     /**
      * Sends raw data to another Endpoint
