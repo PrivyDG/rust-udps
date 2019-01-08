@@ -1,0 +1,15 @@
+[package]
+name = "rust-udps"
+version = "0.1.1"
+authors = ["Daniel Wanner <daniel.wanner@tubber.xyz>"]
+edition = "2018"
+publish = false
+
+[lib]
+name = "udps"
+path = "src/lib.rs"
+crate-type = ["dylib"]
+
+[[example]]
+name = "server"
+crate-type = ["bin"]
