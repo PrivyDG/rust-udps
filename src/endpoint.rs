@@ -1,7 +1,10 @@
 use std::net::*;
 use std::ops::Drop;
+use std::convert::*;
 
-use crate::*;
+use rand::prelude::*;
+
+use crate::prelude::*;
 
 pub struct Endpoint {
     pub address: String,
@@ -43,13 +46,21 @@ impl Endpoint {
     /**
      * Sends raw data to another Endpoint
      */
-    pub fn send_to_raw(&self, addr: String, data: &[u8]) -> Result<usize, Error> {
-        let header_udps = b"UDPS";
-        let header_version = [ VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH ];
-        let mut real_data = Vec::new();
-        real_data.extend_from_slice(header_udps);
-        real_data.extend_from_slice(&header_version);
-        real_data.extend_from_slice(data);
+    pub fn send_to_raw(&self, addr: String, data: Vec<u8>) -> Result<usize, Error> {
+        let package = Package {
+            header: Header {
+                version: format!("{}.{}.{}", &VERSION_MAJOR, &VERSION_MINOR, &VERSION_PATCH),
+                enc_type: EncType::Raw,
+                crypt_type: CryptType::None,
+                method_type: MethodType::Data,
+                package_id: thread_rng().next_u32(),
+                ack: true,
+                sequence_len: None,
+                sequence_ind: None
+            },
+            data: data
+        };
+        let real_data: Vec<u8> = package.try_into()?;
         let size_res = self.socket.send_to(&real_data, &addr);
         if size_res.is_err() {
             return Err(format!("Error: Could not send raw data to address {}!", &addr));
@@ -61,8 +72,6 @@ impl Endpoint {
      * Receives raw data
      */
     pub fn receive_from_raw(&self) -> Result<(Vec<u8>, String), Error> {
-        let header_udps = b"UDPS";
-        let header_version = [ VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH ];
         let mut data: Vec<u8> = Vec::new();
         data.reserve(self.buffer_size as usize);
         let recv_res = self.socket.recv_from(data.as_mut_slice());
@@ -71,19 +80,15 @@ impl Endpoint {
         }
         let (real_size, addr) = recv_res.unwrap();
         data.resize(real_size, 0);
-        
-        // Check for UDPS header
-        if &data[..3] != header_udps {
-            return Err("Error: Received raw UDP packet on UDPS endpoint!".to_string());
-        }
-        // Check for correct UDPS version
-        if &data[4..6] != &header_version {
-            return Err(format!("Error: UDPS version mismatch ({}.{}.{} != {}.{}.{})!", &VERSION_MAJOR, &VERSION_MINOR, &VERSION_PATCH, &data[4], &data[5], &data[6]))
-        }
-
-        data = data[6..].to_vec();
+        let package = Package::try_from(data)?;
         Ok(
-            (data, addr.to_string())
+            (package.data, addr.to_string())
         )
+    }
+}
+
+impl Drop for Endpoint {
+    fn drop(&mut self) {
+
     }
 }

@@ -1,8 +1,12 @@
 #![feature(try_from)]
 #[warn(unused_imports)]
 
+#[macro_use] extern crate serde;
+#[macro_use] extern crate serde_derive;
+extern crate bson;
 extern crate rand;
 extern crate byteorder;
+extern crate libc;
 
 use std::vec::Vec;
 
@@ -17,9 +21,14 @@ pub mod endpoint;
 pub mod connection;
 
 /**
- * Header logic to configure and identify UDPS packages
+ * Package logic to configure and identify UDPS packages
 */
-pub mod header;
+pub mod package;
+
+/**
+ * C API function module
+ */
+pub mod c_api;
 
 /**
  * Prelude module to reexport everything
@@ -30,8 +39,9 @@ pub mod prelude {
     pub use crate::VERSION_PATCH;
     pub use crate::endpoint::*;
     pub use crate::connection::*;
-    pub use crate::header::*;
+    pub use crate::package::*;
 }
+
 /**
  * Major version constant
 */
@@ -39,7 +49,7 @@ pub static VERSION_MAJOR: u8 = 0;
 /**
  * Minor version constant
 */
-pub static VERSION_MINOR: u8 = 2;
+pub static VERSION_MINOR: u8 = 3;
 /**
  * Patch version constant
 */
