@@ -1,5 +1,3 @@
-extern crate udps;
-
 use std::vec::Vec;
 use std::string::String;
 
@@ -8,9 +6,9 @@ use udps::prelude::*;
 fn main() {
     let mut clients: Vec<String> = Vec::new();
     
-    let addr: String = "0.0.0.0:666".to_string();
+    let addr: String = "127.0.0.1:6666".to_string();
 
-    let endpoint_res = Endpoint::new(addr.clone(), 1024);
+    let endpoint_res = Endpoint::new(addr.clone(), 1024, 1000);
     if endpoint_res.is_err() {
         println!("Error creating endpoint!");
         std::process::exit(-127);
@@ -22,7 +20,11 @@ fn main() {
         let raw_res = endpoint.receive_from_raw();
 
         if raw_res.is_err() {
-            println!("Received data, but some error occured!");
+            let error_message = match raw_res {
+                Err(err_msg) => err_msg,
+                Ok(_) => "Unknown error".to_string()
+            };
+            println!("{}", error_message);
             continue;
         }
 

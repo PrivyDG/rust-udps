@@ -14,6 +14,7 @@ pub struct Header {
     pub enc_type: EncType,
     pub crypt_type: CryptType,
     pub method_type: MethodType,
+    pub connection_id: u32,
     pub package_id: u32,
     pub ack: bool,
     pub sequence_len: Option<u32>,
@@ -54,6 +55,9 @@ pub enum MethodType {
 impl TryFrom<Vec<u8>> for Package {
     type Error = String;
 
+    /**
+     * Try decoding from binary (MessagePack encoded)
+     */
     fn try_from(data: Vec<u8>) -> Result<Self, Self::Error> {
         let slice = data.as_slice();
         let package_res = from_slice::<Self>(slice);
@@ -69,6 +73,9 @@ impl TryFrom<Vec<u8>> for Package {
 impl TryInto<Vec<u8>> for Package {
     type Error = String;
 
+    /**
+     * Try encoding into binary (MessagePack encoded)
+     */
     fn try_into(self) -> Result<Vec<u8>, Self::Error> {
         let encode_res = to_vec(&self);
         if encode_res.is_err() {

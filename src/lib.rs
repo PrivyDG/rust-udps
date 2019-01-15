@@ -52,4 +52,4 @@ pub static VERSION_MINOR: u8 = 4;
 /**
  * Patch version constant
 */
-pub static VERSION_PATCH: u8 = 0;
+pub static VERSION_PATCH: u8 = 1;

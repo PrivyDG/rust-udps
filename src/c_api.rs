@@ -14,7 +14,7 @@ pub struct CEndpoint {
 
 
 #[no_mangle]
-pub extern "C" fn endpoint_new(addr: *mut c_char, buffer_size: c_int)  -> *mut CEndpoint {
+pub extern "C" fn endpoint_new(addr: *mut c_char, buffer_size: c_int, read_timeout: c_int)  -> *mut CEndpoint {
     let c_string = unsafe { CString::from_raw(addr) };
     let c_endp = CEndpoint {
         real_endpoint: unsafe {
@@ -22,7 +22,8 @@ pub extern "C" fn endpoint_new(addr: *mut c_char, buffer_size: c_int)  -> *mut C
                 Box::new(
                     Endpoint::new(
                         c_string.to_string_lossy().to_string(),
-                        buffer_size
+                        buffer_size,
+                        read_timeout
                     ).unwrap()
                 )
             )
