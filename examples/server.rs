@@ -57,13 +57,14 @@ fn main() {
 
 fn send_message(endpoint: &mut Endpoint, clients: &mut Vec<String>, from_addr: String, message: String) {
     let real_message = format!("{}> {}\r\n", &from_addr, &message);
-    let data: &[u8] = real_message.as_bytes();
+    let data_slice: &[u8] = real_message.as_bytes();
+    let data: Vec<u8> = Vec::from(data_slice);
 
     print!("{}", &real_message);
 
     for client in clients.iter() {
         if client != &from_addr {
-            let send_res = endpoint.send_to_raw(client.clone(), data);
+            let send_res = endpoint.send_to_raw(client.clone(), &data);
             if send_res.is_err() {
                 println!("Error sending message to endpoint {}!", client);
                 continue;
@@ -74,12 +75,13 @@ fn send_message(endpoint: &mut Endpoint, clients: &mut Vec<String>, from_addr: S
 
 fn send_server_message(endpoint: &mut Endpoint, clients: &mut Vec<String>, message: String) {
     let real_message = format!("SERVER> {}\r\n", &message);
-    let data: &[u8] = real_message.as_bytes();
+    let data_slice: &[u8] = real_message.as_bytes();
+    let data: Vec<u8> = Vec::from(data_slice);
 
     print!("{}", &real_message);
 
     for client in clients.iter() {
-        let send_res = endpoint.send_to_raw(client.clone(), data);
+        let send_res = endpoint.send_to_raw(client.clone(), &data);
         if send_res.is_err() {
             println!("Error sending message to endpoint {}!", client);
             continue;

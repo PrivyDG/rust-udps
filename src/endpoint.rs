@@ -46,7 +46,7 @@ impl Endpoint {
     /**
      * Sends raw data to another Endpoint
      */
-    pub fn send_to_raw(&self, addr: String, data: Vec<u8>) -> Result<usize, Error> {
+    pub fn send_to_raw(&self, addr: String, data: &Vec<u8>) -> Result<usize, Error> {
         let package = Package {
             header: Header {
                 version: format!("{}.{}.{}", &VERSION_MAJOR, &VERSION_MINOR, &VERSION_PATCH),
@@ -58,7 +58,7 @@ impl Endpoint {
                 sequence_len: None,
                 sequence_ind: None
             },
-            data: data
+            data: data.to_owned()
         };
         let real_data: Vec<u8> = package.try_into()?;
         let size_res = self.socket.send_to(&real_data, &addr);

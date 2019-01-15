@@ -3,10 +3,9 @@
 
 #[macro_use] extern crate serde;
 #[macro_use] extern crate serde_derive;
-extern crate bson;
 extern crate rand;
-extern crate byteorder;
 extern crate libc;
+extern crate rmp_serde as rmps;
 
 use std::vec::Vec;
 
@@ -49,7 +48,7 @@ pub static VERSION_MAJOR: u8 = 0;
 /**
  * Minor version constant
 */
-pub static VERSION_MINOR: u8 = 3;
+pub static VERSION_MINOR: u8 = 4;
 /**
  * Patch version constant
 */

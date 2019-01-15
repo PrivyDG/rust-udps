@@ -1,6 +1,6 @@
 [package]
 name = "rust-udps"
-version = "0.3.0-alpha"
+version = "0.4.0-alpha"
 authors = ["Daniel Wanner <daniel.wanner@tubber.xyz>"]
 edition = "2018"
 publish = false
@@ -16,8 +16,7 @@ crate-type = ["bin"]
 
 [dependencies]
 rand = "0.6.3"
-byteorder = "1.2.7"
 libc = "*"
 serde = "*"
 serde_derive = "*"
-bson = "*"
+rmp-serde = "*"

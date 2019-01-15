@@ -2,11 +2,9 @@ use std::convert::*;
 use std::option::*;
 use std::vec::*;
 
-use byteorder::{LittleEndian, ReadBytesExt};
 use rand::prelude::*;
 use serde::*;
-use bson::*;
-use bson::spec::*;
+use rmps::*;
 
 use crate::*;
 
@@ -57,15 +55,13 @@ impl TryFrom<Vec<u8>> for Package {
     type Error = String;
 
     fn try_from(data: Vec<u8>) -> Result<Self, Self::Error> {
-        let bson = bson::Bson::from(
-            (BinarySubtype::Generic, data)
-        );
-        let decode_res = from_bson::<Self>(bson);
-        if decode_res.is_err() {
-            return Err("Unknown BSON decode error!".to_string());
+        let slice = data.as_slice();
+        let package_res = from_slice::<Self>(slice);
+        if package_res.is_err() {
+            return Err("Unknown error decoding MessagePack package!".to_string());
         }
-        Ok (
-            decode_res.unwrap()
+        Ok(
+            package_res.unwrap()
         )
     }
 }
@@ -74,14 +70,12 @@ impl TryInto<Vec<u8>> for Package {
     type Error = String;
 
     fn try_into(self) -> Result<Vec<u8>, Self::Error> {
-        let encode_res = to_bson::<Self>(&self);
+        let encode_res = to_vec(&self);
         if encode_res.is_err() {
-            return Err("Unknown BSON encode error!".to_string());
+            return Err("Unknown error encoding MessagePack package!".to_string());
         }
-        let bson = encode_res.unwrap();
-        if let Bson::Binary(BinarySubtype::Generic, data) = bson {
-            return Ok(data);
-        }
-        Err("Unimplemented.".to_string())
+        Ok(
+            encode_res.unwrap()
+        )
     }
 }
