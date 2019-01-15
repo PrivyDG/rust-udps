@@ -53,3 +53,11 @@ pub static VERSION_MINOR: u8 = 4;
  * Patch version constant
 */
 pub static VERSION_PATCH: u8 = 1;
+/**
+ * Version constant
+ */
+pub static VERSION: [u8; 3] = [
+    VERSION_MAJOR,
+    VERSION_MINOR,
+    VERSION_PATCH
+];

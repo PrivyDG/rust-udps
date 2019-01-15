@@ -10,7 +10,7 @@ use crate::*;
 
 #[derive(Serialize, Deserialize)]
 pub struct Header {
-    pub version: String,
+    pub version: [u8; 3],
     pub enc_type: EncType,
     pub crypt_type: CryptType,
     pub method_type: MethodType,
@@ -50,6 +50,28 @@ pub enum MethodType {
     AsymmKey,
     SymmKey,
     Data,
+}
+
+impl Package {
+    /**
+     * Creates a new package with default settings.
+     */
+    pub fn default() -> Self {
+        Self {
+            header: Header {
+                version: crate::VERSION,
+                enc_type: EncType::Raw,
+                crypt_type: CryptType::None,
+                method_type: MethodType::Data,
+                connection_id: thread_rng().next_u32(),
+                package_id: thread_rng().next_u32(),
+                ack: false,
+                sequence_ind: None,
+                sequence_len: None 
+            },
+            data: Vec::new()
+        }
+    }
 }
 
 impl TryFrom<Vec<u8>> for Package {
