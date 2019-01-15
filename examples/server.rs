@@ -24,7 +24,7 @@ fn main() {
                 Err(err_msg) => err_msg,
                 Ok(_) => "Unknown error".to_string()
             };
-            println!("{}", error_message);
+            //println!("{}", error_message);
             continue;
         }
 
