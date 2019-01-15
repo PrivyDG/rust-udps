@@ -94,7 +94,7 @@ impl Endpoint {
 */
     pub fn receive_from_raw(&self) -> Result<(Vec<u8>, String), Error> {
         let mut data: Vec<u8> = Vec::new();
-        data.reserve(self.buffer_size as usize);
+        data.resize(self.buffer_size as usize, 0);
         let recv_res = self.socket.recv_from(data.as_mut_slice());
         if recv_res.is_err() {
             return Err(format!("Error: Unknown"));
