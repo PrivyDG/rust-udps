@@ -32,7 +32,7 @@ fn main() {
         std::process::exit(-127);
     }
 
-    let endpoint = Arc::new(endpoint_res.unwrap());
+    let endpoint = endpoint_res.unwrap();
     println!("Created endpoint");
     
     unsafe {
@@ -41,7 +41,7 @@ fn main() {
         
         let join_handle = thread::spawn(move || {
             println!("Receive thread: Starting receive_loop");
-            receive_loop(t_endpoint);
+            receive_loop(endpoint);
         });
 
         let mut line = String::new();
@@ -70,7 +70,7 @@ fn main() {
     println!("Server shutting down...");
 }
 
-fn receive_loop(endpoint: Arc<Endpoint>) {
+fn receive_loop(endpoint: EndpointArc) {
     unsafe {
         while running.load(Ordering::SeqCst) {
             let recv_res = endpoint.receive_from_raw();
@@ -84,7 +84,7 @@ fn receive_loop(endpoint: Arc<Endpoint>) {
     }
 }
 
-fn send_message(endpoint: &Arc<Endpoint>, address: &String, message: &String) {
+fn send_message(endpoint: EndpointArc, address: &String, message: &String) {
     println!("Sending message to {} ...", address);
     let data_slice = message.as_bytes();
     let data = Vec::from(data_slice);

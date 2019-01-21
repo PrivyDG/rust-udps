@@ -1,14 +1,17 @@
 use std::convert::*;
 use std::option::*;
 use std::vec::*;
+use std::mem::*;
+use std::time::*;
+use std::clone::Clone;
 
 use rand::prelude::*;
 use serde::*;
 use rmps::*;
 
-use crate::*;
+use crate::prelude::*;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Header {
     pub version: [u8; 3],
     pub enc_type: EncType,
@@ -21,28 +24,28 @@ pub struct Header {
     pub sequence_ind: Option<u32>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Package {
     pub header: Header,
     pub data: Vec<u8>
 }
 
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub enum EncType {
     Raw = 0,
     ZIP,
     LZO    
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub enum CryptType {
     None = 0,
     Asymm,
     Symm
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub enum MethodType {
     Connect = 0,
     Disconnect,
@@ -56,7 +59,7 @@ impl Package {
     /**
      * Creates a new package with default settings.
      */
-    pub fn default() -> Self {
+    pub fn new_default() -> Self {
         Self {
             header: Header {
                 version: crate::VERSION,
@@ -72,6 +75,12 @@ impl Package {
             data: Vec::new()
         }
     }
+}
+
+pub struct PackageAck {
+    pub cached_package: Package,
+    pub timestamp: Instant,
+    pub attempts: u8,
 }
 
 impl TryFrom<Vec<u8>> for Package {
@@ -107,4 +116,35 @@ impl TryInto<Vec<u8>> for Package {
             encode_res.unwrap()
         )
     }
+}
+
+impl PackageAck {
+    /**
+     * Creates a new Package acknowledgement meta struct
+     */
+    pub fn new(package: &Package) -> Self {
+        let instant = Instant::now();
+        Self {
+            cached_package: package.clone(),
+            timestamp: instant,
+            attempts: 1,
+        }
+    }
+}
+
+pub fn conv_slice_to_u32(slice: &[u8]) -> u32 {
+    let buf = [
+        slice[0],
+        slice[1],
+        slice[2],
+        slice[3]
+    ];
+    u32::from_le_bytes(buf)
+}
+
+pub fn conv_u32_to_bytes(input: &u32) -> [u8; 4] {
+    let bytes = unsafe {
+        transmute(input.to_le())
+    };
+    return bytes;
 }

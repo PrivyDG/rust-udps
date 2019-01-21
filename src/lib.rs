@@ -1,4 +1,4 @@
-#![feature(try_from)]
+#![feature(try_from, integer_atomics)]
 #[warn(unused_imports)]
 
 #[macro_use] extern crate serde;
@@ -36,6 +36,7 @@ pub mod prelude {
     pub use crate::VERSION_MAJOR;
     pub use crate::VERSION_MINOR;
     pub use crate::VERSION_PATCH;
+    pub use crate::VERSION;
     pub use crate::endpoint::*;
     pub use crate::connection::*;
     pub use crate::package::*;
