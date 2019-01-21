@@ -140,7 +140,7 @@ impl Endpoint {
 
     /**
      * Connect to a another UDPS endpoint
-     */
+*/
     pub fn connect(&mut self, addr: &String) -> Result<ConnectionArc, Error> {
         let mut package = Package::new_default();
         package.header.method_type = MethodType::Connect;
@@ -159,7 +159,7 @@ impl Endpoint {
 
     /**
      * Disconnect from another UDPS endpoint
-     */
+*/
     pub fn disconnect(&mut self, connection_id: &u32) {
         let connection_opt = self.connection_list.write().unwrap().remove(connection_id);
         if connection_opt.is_some() {
@@ -174,7 +174,7 @@ impl Endpoint {
 
     /**
      * Receive loop
-     */
+*/
     pub fn receive_loop(self: EndpointArc) {
         let mut running = true;
         while running {
@@ -216,7 +216,6 @@ impl Endpoint {
         let mut timestamp_last = Instant::now();
         let mut removal_list = Vec::new();
         while running {
-            running = self.running.load(Ordering::Relaxed);
             for (package_id, package_ack) in self.ack_list.write().unwrap().iter_mut() {
                 let current_time = Instant::now();
                 if package_ack.attempts >= self.config.max_ack_attempts {
@@ -247,6 +246,7 @@ impl Endpoint {
                 );
             }
             timestamp_last = now;
+            running = self.running.load(Ordering::Relaxed);
         }
     }
 
