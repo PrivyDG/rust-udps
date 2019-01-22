@@ -17,8 +17,10 @@ use std::time::{
 };
 
 use rand::prelude::*;
+use openssl::rsa::*;
+use openssl::pkey::*;
 
-use crate::prelude::*;
+#[macro_use] use crate::prelude::*;
 
 pub type Error = String;
 pub type EndpointArc = Arc<Endpoint>;
@@ -29,7 +31,8 @@ pub struct EndpointConfig {
     pub ack_interval: u64,
     pub ack_loop_time: u64,
     pub max_ack_attempts: u8,
-    pub max_package_backlog: u32
+    pub max_package_backlog: u32,
+    pub private_key: Rsa<Private>,
 }
 
 pub struct Endpoint {
@@ -47,13 +50,15 @@ impl EndpointConfig {
      * Creates a new configuration with default values.
      */
     pub fn new(address: &String) -> Self {
+        let rsa = Rsa::generate(2048).unwrap();
         Self {
             address: address.clone(),
             buffer_size: 8192,
-            ack_interval: 100,
+            ack_interval: 200,
             ack_loop_time: 250,
-            max_ack_attempts: 10,
-            max_package_backlog: 32
+            max_ack_attempts: 20,
+            max_package_backlog: 32,
+            private_key: rsa
         }
     }
 }
@@ -61,7 +66,7 @@ impl EndpointConfig {
 impl Endpoint {
     /**
      * Creates a new Endpoint and binds it to the current address.
-     */
+*/
     pub fn new(config: EndpointConfig) -> Result<EndpointArc, Error> {
         let socket_res = UdpSocket::bind(&config.address);
         if socket_res.is_err() {
@@ -116,7 +121,7 @@ impl Endpoint {
 
     /**
      * Stops the receive loop
-     */
+*/
     pub fn stop(&mut self) {
         // Set boolean running to false so background loops stop after the current step
         self.running.store(false, Ordering::Relaxed);
@@ -181,9 +186,10 @@ impl Endpoint {
             running = self.running.load(Ordering::Relaxed);
             let recv_res = self.receive();
             if recv_res.is_err() {
+                // Skip any invalid packages
                 continue;
             }
-            let (package, _) = recv_res.unwrap();
+            let (package, addr) = recv_res.unwrap();
             let exists = {
                 let connections = self.connection_list.read().unwrap();
                 connections.get(&package.header.connection_id).is_some()
@@ -208,52 +214,66 @@ impl Endpoint {
         }
     }
 
+    fn handle_package(&self, addr: String, package: Package) {
+        // Check if there exists a connection:
+        let exists = {
+            let connections = self.connection_list.read().unwrap();
+            connections.get(&package.header.connection_id).is_some()
+        };
+        let conn_arc: ConnectionArc;
+        // Connection does not exist. It is either a new connection request or an
+        // unknown/unauthorized connection
+        if !exists {
+            // If this package is not a connection request and from and unknown connection - drop it!
+            if package.header.method_type != MethodType::Connect {
+                return;
+            }
+            // The package is a connection request. Create a new connection.
+            let new_conn_arc = Arc::new(
+                Connection::new(&addr, &package.header.connection_id)
+            );
+
+            // Save this connection in the internal connection list.
+            let mut connections = self.connection_list.write().unwrap();
+            connections.insert(package.header.connection_id, new_conn_arc);
+            // Return a clone of the Arc to this list item
+            conn_arc = connections.get(&package.header.connection_id).unwrap().clone();
+        }
+        // Connection exists
+        else {
+            let connections = self.connection_list.read().unwrap();
+            conn_arc = connections.get(&package.header.connection_id).unwrap().clone();
+        }
+        
+        // NEXT: Handle package acknowledgement
+        // If the incoming package has the `ack` flag set,
+        // Immediately send a response acknowledging the package.
+        if package.header.ack {
+            let mut response_package = Package::new_default();
+            let data = conv_u32_to_bytes(&package.header.package_id);
+            response_package.header.connection_id = conn_arc.id;
+            response_package.header.method_type = MethodType::Ack;
+            response_package.data.clone_from_slice(&data);
+            self.send(response_package).unwrap_or(0);
+        }
+    }
+
     /**
      * Acknowledgement loop
-     */
+    */
     pub fn ack_loop(self: EndpointArc) {
-        let mut running = true;
-        let mut timestamp_last = Instant::now();
-        let mut removal_list = Vec::new();
-        while running {
-            for (package_id, package_ack) in self.ack_list.write().unwrap().iter_mut() {
-                let current_time = Instant::now();
-                if package_ack.attempts >= self.config.max_ack_attempts {
-                    removal_list.push(package_ack.cached_package.header.package_id);
-                    continue;
-                }
-                let elapsed_ms = current_time.duration_since(package_ack.timestamp).as_millis() as u64;
-                if elapsed_ms >= self.config.ack_interval {
-                    let package = package_ack.cached_package.clone();
-                    let send_res = self.send(package);
-                    if send_res.is_ok() {
-                        package_ack.attempts += 1;
-                        package_ack.timestamp = current_time.clone();
-                    }
-                }
-            }
-            for package_id in removal_list.iter() {
-                self.ack_list.write().unwrap().remove(&package_id);
-            }
-            removal_list.clear();
-            let now = Instant::now();
-            let elapsed_ms = now.duration_since(timestamp_last).as_millis() as u64;
-            if elapsed_ms <= self.config.ack_loop_time {
-                std::thread::sleep(
-                    Duration::from_millis(
-                        self.config.ack_loop_time - elapsed_ms
-                    )
-                );
-            }
-            timestamp_last = now;
-            running = self.running.load(Ordering::Relaxed);
-        }
+        // TODO: Rewrite for new loop_at! macro
+        let mut iteration_ms = 0u64;
+
+        loop_at!((1000 / self.config.ack_loop_time), iteration_ms, {
+
+        });
     }
 
 
     /**
      * Sends a package to another Endpoint
-     */
+*/
     pub fn send(&self, package: Package) -> Result<usize, Error> {
         let exists = {
             let connections = self.connection_list.read().unwrap();
@@ -290,7 +310,7 @@ impl Endpoint {
 
     /**
      * Receives a package from another Endpoint
-     */
+*/
     fn receive(&self) -> Result<(Package, String), Error> {
         let mut data: Vec<u8> = Vec::new();
         data.resize(self.config.buffer_size as usize, 0);

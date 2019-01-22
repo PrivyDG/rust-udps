@@ -1,13 +1,35 @@
 #![feature(try_from, integer_atomics)]
 #[warn(unused_imports)]
 
-#[macro_use] extern crate serde;
-#[macro_use] extern crate serde_derive;
+#[macro_use]extern crate serde;
+#[macro_use]extern crate serde_derive;
 extern crate rand;
 extern crate libc;
 extern crate rmp_serde as rmps;
+extern crate openssl;
+extern crate twofish;
 
-use std::vec::Vec;
+/**
+ * Prelude module to reexport everything
+*/
+#[macro_use]
+pub mod prelude {
+    pub use crate::connection::*;
+    pub use crate::endpoint::*;
+    pub use crate::package::*;
+    pub use crate::util::*;
+
+    pub use crate::VERSION;
+    pub use crate::VERSION_MAJOR;
+    pub use crate::VERSION_MINOR;
+    pub use crate::VERSION_PATCH;
+}
+
+/**
+ * Utility module
+*/
+#[macro_use]
+pub mod util;
 
 /**
  * Endpoint logic to send and receive data with the UDPS protocol
@@ -26,21 +48,8 @@ pub mod package;
 
 /**
  * C API function module
- */
-pub mod c_api;
-
-/**
- * Prelude module to reexport everything
 */
-pub mod prelude {
-    pub use crate::VERSION_MAJOR;
-    pub use crate::VERSION_MINOR;
-    pub use crate::VERSION_PATCH;
-    pub use crate::VERSION;
-    pub use crate::endpoint::*;
-    pub use crate::connection::*;
-    pub use crate::package::*;
-}
+pub mod c_api;
 
 /**
  * Major version constant
@@ -56,7 +65,7 @@ pub static VERSION_MINOR: u8 = 4;
 pub static VERSION_PATCH: u8 = 1;
 /**
  * Version constant
- */
+*/
 pub static VERSION: [u8; 3] = [
     VERSION_MAJOR,
     VERSION_MINOR,

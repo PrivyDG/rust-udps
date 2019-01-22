@@ -31,21 +31,21 @@ pub struct Package {
 }
 
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub enum EncType {
     Raw = 0,
     ZIP,
     LZO    
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub enum CryptType {
     None = 0,
     Asymm,
     Symm
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub enum MethodType {
     Connect = 0,
     Disconnect,
@@ -130,21 +130,4 @@ impl PackageAck {
             attempts: 1,
         }
     }
-}
-
-pub fn conv_slice_to_u32(slice: &[u8]) -> u32 {
-    let buf = [
-        slice[0],
-        slice[1],
-        slice[2],
-        slice[3]
-    ];
-    u32::from_le_bytes(buf)
-}
-
-pub fn conv_u32_to_bytes(input: &u32) -> [u8; 4] {
-    let bytes = unsafe {
-        transmute(input.to_le())
-    };
-    return bytes;
 }

@@ -20,9 +20,16 @@ name = "client"
 path = "examples/client.rs"
 crate-type = ["bin"]
 
+[[example]]
+name = "loop-at"
+path = "examples/loop_at.rs"
+crate-type = ["bin"]
+
 [dependencies]
 rand = "0.6.3"
 libc = "*"
 serde = "*"
 serde_derive = "*"
 rmp-serde = "*"
+openssl = "*"
+twofish = "*"
