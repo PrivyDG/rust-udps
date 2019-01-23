@@ -33,11 +33,12 @@ pub struct Connection {
 /**
  * enum for storing state of individual connections
 */
+#[derive(PartialEq)]
 pub enum ConnectionState {
     Disconnected = 0,
     Connected,
 }
-
+#[derive(PartialEq)]
 pub enum CryptState {
     None = 0,
     Asymm,

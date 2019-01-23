@@ -41,6 +41,7 @@ fn main() {
         let mut line = String::new();
         stdin().read_line(&mut line).unwrap();
         line.trim();
+        line.pop();
         match line.as_str() {
             "EXIT" => {
                 RUNNING.store(false, Ordering::Relaxed);

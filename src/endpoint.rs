@@ -32,6 +32,7 @@ pub type EndpointArc = Arc<Endpoint>;
 pub struct EndpointConfig {
     pub address: String,
     pub buffer_size: u32,
+    pub read_timeout: u64,
     pub ack_interval: u64,
     pub ack_loop_time: u64,
     pub max_ack_attempts: u8,
@@ -59,6 +60,7 @@ impl EndpointConfig {
         Self {
             address: address.clone(),
             buffer_size: 8192,
+            read_timeout: 1000,
             ack_interval: 200,
             ack_loop_time: 1000,
             max_ack_attempts: 20,
@@ -78,6 +80,14 @@ impl Endpoint {
             return Err("Could not bind socket to address!".to_string());
         }
         let socket = socket_res.unwrap();
+
+        socket.set_read_timeout(
+            Some(
+                Duration::from_millis(
+                    config.read_timeout
+                )
+            )
+        ).unwrap();
 
         let endpoint = Endpoint {
             running: AtomicBool::new(true),
@@ -153,7 +163,7 @@ impl Endpoint {
 
     /**
      * Connect to a another UDPS endpoint
-    */
+*/
     pub fn connect(&self, addr: &String) -> Result<ConnectionArc, Error> {
         let stdout = stdout();
         //writeln!(&mut stdout.lock(), "Connecting UDPS endpoint to {}", addr);
@@ -168,6 +178,8 @@ impl Endpoint {
             connection_list.insert(connection_id, conn_arc.clone());
         }
 
+        *conn_arc.state.write().unwrap() = ConnectionState::Connected;
+
         self.send(package).unwrap();
 
         Ok(
@@ -177,15 +189,18 @@ impl Endpoint {
 
     /**
      * Disconnect from another UDPS endpoint
-*/
+     */
     pub fn disconnect(&self, connection_id: &u32) {
-        let connection_opt = self.connection_list.write().unwrap().remove(connection_id);
-        if connection_opt.is_some() {
+        let exists = {
+            let connections = self.connection_list.read().unwrap();
+            connections.get(connection_id).is_some()
+        };
+        if exists {
             let mut package = Package::new_default();
             package.header.method_type = MethodType::Disconnect;
             package.header.connection_id = *connection_id;
             self.send(package).unwrap_or(0);
-            let connection = connection_opt.unwrap();
+            let connection = self.connection_list.write().unwrap().remove(connection_id).unwrap();
             *connection.state.write().unwrap() = ConnectionState::Disconnected;
         }
     }
@@ -194,13 +209,18 @@ impl Endpoint {
      * Receive loop
 */
     pub fn receive_loop(self: EndpointArc) {
+        let stdout = stdout();
         let mut running = true;
         while running {
             running = self.running.load(Ordering::Relaxed);
             let recv_res = self.receive();
+            if recv_res.is_err() {
+                continue;
+            }
             let (package, addr) = recv_res.unwrap();
             self.handle_package(addr, package);
         }
+        //writeln!(&mut stdout.lock(), "Shutting down receive_loop");
     }
 
     fn handle_package(&self, addr: String, package: Package) {
@@ -223,6 +243,8 @@ impl Endpoint {
             let new_conn_arc = Arc::new(
                 Connection::new(&addr, &package.header.connection_id)
             );
+
+            *new_conn_arc.state.write().unwrap() = ConnectionState::Connected;
 
             let mut new_connections = self.new_connection_list.write().unwrap();
             new_connections.push(new_conn_arc.clone());
@@ -267,6 +289,9 @@ impl Endpoint {
                 return;
             },
             MethodType::Disconnect => {
+                *conn_arc.state.write().unwrap() = ConnectionState::Disconnected;
+                let mut connection_list = self.connection_list.write().unwrap();
+                connection_list.remove(&conn_arc.id);
                 return;
             }
             _ => {}
@@ -323,6 +348,8 @@ impl Endpoint {
             remove_list.clear();
             attempt_increase_list.clear();
         });
+
+        //writeln!(&mut stdout.lock(),  "Shutting down ack_loop");
     }
 
 
