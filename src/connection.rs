@@ -4,6 +4,8 @@ use std::collections::{
     HashSet,
     VecDeque
 };
+use std::iter::IntoIterator;
+use std::ops::DerefMut;
 
 use openssl::rsa::*;
 use openssl::pkey::*;
@@ -40,15 +42,6 @@ pub enum CryptState {
     None = 0,
     Asymm,
     Symm,
-}
-
-impl Iterator for Connection {
-    type Item = Package;
-
-    fn next(&mut self) -> Option<Package> {
-        let mut packages = self.package_list.write().unwrap();
-        packages.pop_front()
-    }
 }
 
 impl Connection {
@@ -108,5 +101,19 @@ impl Connection {
     pub fn set_dec_secret(&self, secret_key: Vec<u8>) {
         let mut dec_secret = self.secret_key_dec.write().unwrap();
         *dec_secret = Some(secret_key);
+    }
+
+    pub fn collect_packages(&self) -> Vec<Package> {
+        let ret = {
+            let packages = self.package_list.read().unwrap();
+            packages.iter().map(|p| {
+                p.clone()
+            }).collect()
+        };
+        let mut packages = self.package_list.write().unwrap();
+        let mut journal = self.package_journal.write().unwrap();
+        packages.clear();
+        journal.clear();
+        ret
     }
 }

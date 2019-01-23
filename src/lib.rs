@@ -14,15 +14,11 @@ extern crate twofish;
 */
 #[macro_use]
 pub mod prelude {
+    pub use crate::*;
     pub use crate::connection::*;
     pub use crate::endpoint::*;
     pub use crate::package::*;
     pub use crate::util::*;
-
-    pub use crate::VERSION;
-    pub use crate::VERSION_MAJOR;
-    pub use crate::VERSION_MINOR;
-    pub use crate::VERSION_PATCH;
 }
 
 /**

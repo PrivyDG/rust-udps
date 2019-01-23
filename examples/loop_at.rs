@@ -1,4 +1,3 @@
-use udps::*;
 use udps::prelude::*;
 
 fn loop_fun(i: i32) {
@@ -9,7 +8,7 @@ fn loop_fun(i: i32) {
 fn main() {
     let mut i = 0;
     let mut ms: u64 = 0;
-    loop_at!(4, ms, {
+    loop_at!(60, ms, {
         println!("Time elapsed since last call: {}ms", &ms);
         loop_fun(i);
         i += 1;

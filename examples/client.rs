@@ -3,94 +3,90 @@ use std::sync::atomic::*;
 use std::thread;
 use std::sync::*;
 use std::result::*;
+use std::string::*;
 
 use udps::prelude::*;
 
-static mut running: AtomicBool = AtomicBool::new(false);
+pub static RUNNING: AtomicBool = AtomicBool::new(false);
 
 fn main() {
+    println!("Enter address to connect to.");
+    print!(">> ");
     let mut address = String::new();
-    let mut cont = true;
-
-    while cont {
-        println!("Please enter the address and port to connect to.");
-        print!(">> ");
-        let _ = stdout().flush();
-        let read_res = stdin().read_line(&mut address);
-        cont = read_res.is_err();
-    }
+    stdout().flush().unwrap();
+    stdin().read_line(&mut address).unwrap();
     address.pop();
-
-    println!("Connecting to {} .", &address);
-    let endpoint_res = Endpoint::new("127.0.0.1:8888".to_string(), 1024, 1000);
+    let own_address = "127.0.0.1:0".to_string();
+    let config = EndpointConfig::new(&own_address);
+    let endpoint_res = Endpoint::new(config);
     if endpoint_res.is_err() {
-        let error_message = match endpoint_res {
-            Err(err_message) => err_message,
-            Ok(_) => "Unknown Error!".to_string()
-        };
-        println!("{}", error_message);
-        std::process::exit(-127);
+        println!("ERROR! Could not create endpoint! Terminating program.");
+        std::process::exit(-1);
     }
-
+    println!("Created endpoint.");
     let endpoint = endpoint_res.unwrap();
-    println!("Created endpoint");
-    
-    unsafe {
-        let t_endpoint = endpoint.clone();
-        running.store(true, Ordering::SeqCst);
-        
-        let join_handle = thread::spawn(move || {
-            println!("Receive thread: Starting receive_loop");
-            receive_loop(endpoint);
-        });
-
+    RUNNING.store(true, Ordering::Relaxed);
+    println!("Setting runstate.");
+    let endpoint_copy = endpoint.clone();
+    let connection = endpoint.connect(&address).unwrap();
+    let connection_copy = connection.clone();
+    println!("Created Arc copies.");
+    let join_handle = std::thread::spawn(move || {
+        receive_loop(endpoint_copy, connection_copy);
+    });
+    println!("Starting main send thread.");
+    while RUNNING.load(Ordering::Relaxed) {
+        print!(">> ");
+        stdout().flush().unwrap();
         let mut line = String::new();
-        thread::sleep_ms(500);
-        println!("Main thread: Starting send_loop");
-        while running.load(Ordering::SeqCst) {
-            println!("Reading new line...");
-            print!(">> ");
-            let _ = stdout().flush();
-            let read_res = stdin().read_line(&mut line);
-            if read_res.is_err() {
-                continue;
-            }
-            if line == "EXIT" {
-                println!("User pressed \"EXIT\".");
+        stdin().read_line(&mut line).unwrap();
+        line.trim();
+        match line.as_str() {
+            "EXIT" => {
+                RUNNING.store(false, Ordering::Relaxed);
                 break;
-            } else {
-                send_message(&endpoint, &address, &line);
+            },
+            _ => {
+                let mut package = Package::new_default();
+                package.header.connection_id = connection.id;
+                package.header.method_type = MethodType::Data;
+                let data = line.as_bytes();
+                package.data.resize(data.len(), 0);
+                package.data.clone_from_slice(data);
+                endpoint.send(package).unwrap();
             }
-        }
-        println!("send_loop ended!");
-        running.store(false, Ordering::SeqCst);
-        join_handle.join().unwrap();
+        };
     }
-
-    println!("Server shutting down...");
+    let stdout = stdout();
+    writeln!(&mut stdout.lock(), "Shutting down client.").unwrap();
+    writeln!(
+        &mut stdout.lock(),
+        "Waiting for receive_loop thread to shut down..."
+    )
+    .unwrap();
+    join_handle.join().unwrap();
+    writeln!(&mut stdout.lock(), "OK").unwrap();
+    writeln!(&mut stdout.lock(), "Waiting for endpoint to shut down...").unwrap();
+    endpoint.stop();
+    writeln!(&mut stdout.lock(), "OK").unwrap();
+    writeln!(&mut stdout.lock(), "Shutdown finished and clean.").unwrap();
 }
 
-fn receive_loop(endpoint: EndpointArc) {
-    unsafe {
-        while running.load(Ordering::SeqCst) {
-            let recv_res = endpoint.receive_from_raw();
-            if recv_res.is_err() {
-                continue;
-            }
-            let (data, addr) = recv_res.unwrap();
-            let message = String::from_utf8_lossy(data.as_slice());
-            println!("{}", message);
+fn receive_loop(endpoint: EndpointArc, connection: ConnectionArc) {
+    let stdout = stdout();
+    writeln!(&mut stdout.lock(), "Starting receive loop!").unwrap();
+    let mut running = RUNNING.load(Ordering::Relaxed);
+    let mut ms = 0;
+    loop_at!(10, ms, {
+        running = RUNNING.load(Ordering::Relaxed);
+        if !running {
+            break;
         }
-    }
-}
-
-fn send_message(endpoint: EndpointArc, address: &String, message: &String) {
-    println!("Sending message to {} ...", address);
-    let data_slice = message.as_bytes();
-    let data = Vec::from(data_slice);
-    println!("Data size: {} ...", data.len());
-    let send_res = endpoint.send_to_raw(address.clone(), &data);
-    if send_res.is_err() {
-        println!("Error sending message.");
-    }
+        for package in connection.collect_packages() {
+            let data_slice = package.data.as_slice();
+            let message = String::from_utf8_lossy(data_slice).clone();
+            writeln!(&mut stdout.lock(), "{}", message).unwrap();
+        }
+    });
+    // Exit the thread
 }
