@@ -23,37 +23,111 @@ use std::time::{
 use rand::prelude::*;
 use openssl::rsa::*;
 use openssl::pkey::*;
+use crate::prelude::*;
 
-#[macro_use]use crate::prelude::*;
-
+/**
+ * Convencience typedef, we use simple messages as errors
+ */
 pub type Error = String;
+/**
+ * Convenience typedef, Arc of Endpoint
+ */
 pub type EndpointArc = Arc<Endpoint>;
 
+/**
+ * Endpoint configuration
+ */
 pub struct EndpointConfig {
+    /**
+     * The address the endpoint should bind to
+     */
     pub address: String,
+    /**
+     * The buffer size used when retrieving data
+     */
     pub buffer_size: u32,
+    /**
+     * The amount of time (in ms) the socket will
+     * stop blocking after not receiving data
+     */
     pub read_timeout: u64,
+    /**
+     * Unused
+     */
     pub ack_interval: u64,
+    /**
+     * Interval of the Acknowledgement loop running in the background
+     */
     pub ack_loop_time: u64,
+    /**
+     * Maximum number of Acknowledgement attempts
+     */
     pub max_ack_attempts: u8,
+    /**
+     * Maximum length of package queue
+     */
     pub max_package_backlog: u32,
+    /**
+     * Private RSA key, used for transmitting the symmetric key
+     */
     pub private_key: Rsa<Private>,
+    /**
+     * Private AES key, used for encrypting outgoing messages
+     */
+    pub secret_key: Vec<u8>
 }
 
+/**
+ * Endpoint struct.
+ * Represents an endpoint.  
+ * An endpoint binds to a single address and port - you can let the  
+ * OS choose one for you by picking ":0". An endpoint can have multiple connections, retrieved  
+ * via the `collect_new_connections()` method, and initiated via the `connect` method.  
+ * Packages are retrieved asynchonously in a background thread and placed in a queue owned by  
+ * the corresponding connection.  
+ * It automatically resends packages every `ack_loop_time` ms that have the `ack` flag set,  
+ * a maximum `max_ack_attempts` of times.
+ * 
+ */
 pub struct Endpoint {
+    /**
+     * Configuration
+     */
     pub config: EndpointConfig,
+    /**
+     * Internal: UDP socket
+     */
     pub socket: UdpSocket,
+    /**
+     * True if socket is currently running
+     */
     pub running: AtomicBool,
+    /**
+     * List of connections
+     */
     pub connection_list: RwLock<HashMap<u32, ConnectionArc>>,
+    /**
+     * List of packages to resend in the background
+     */
+    pub ack_list: RwLock<HashMap<u32, PackageAck>>,
+    /**
+     * List of new connections
+     */
     pub new_connection_list: RwLock<Vec<ConnectionArc>>,
+    /**
+     * Thread handle for the thread receiving data in the background
+     */
     pub receive_thread: RwLock<Option<JoinHandle<()>>>,
-    pub ack_thread: RwLock<Option<JoinHandle<()>>>,
-    pub ack_list: RwLock<HashMap<u32, PackageAck>>
+    /**
+     * Thread handle for the thread resending packages until
+     * they are received
+     */
+    pub ack_thread: RwLock<Option<JoinHandle<()>>>
 }
 
 impl EndpointConfig {
     /**
-     * Creates a new configuration with default values.
+     * ## Creates a new configuration with default values.
      */
     pub fn new(address: &String) -> Self {
         let rsa = Rsa::generate(2048).unwrap();
@@ -65,7 +139,8 @@ impl EndpointConfig {
             ack_loop_time: 1000,
             max_ack_attempts: 20,
             max_package_backlog: 32,
-            private_key: rsa
+            private_key: rsa,
+            secret_key: generate_random_bytes(32)
         }
     }
 }
@@ -73,7 +148,7 @@ impl EndpointConfig {
 impl Endpoint {
     /**
      * Creates a new Endpoint and binds it to the current address.
-*/
+     */
     pub fn new(config: EndpointConfig) -> Result<EndpointArc, Error> {
         let socket_res = UdpSocket::bind(&config.address);
         if socket_res.is_err() {
@@ -87,7 +162,7 @@ impl Endpoint {
                     config.read_timeout
                 )
             )
-        ).unwrap();
+        ).unwrap_or(());
 
         let endpoint = Endpoint {
             running: AtomicBool::new(true),
@@ -138,8 +213,8 @@ impl Endpoint {
     }
 
     /**
-     * Stops the receive loop
-*/
+     * Stops the socket and all background threads.
+     */
     pub fn stop(&self) {
         // Set boolean running to false so background loops stop after the current step
         self.running.store(false, Ordering::Relaxed);
@@ -162,8 +237,10 @@ impl Endpoint {
     }
 
     /**
-     * Connect to a another UDPS endpoint
-*/
+     * Connect to a another UDPS endpoint.  
+     * This method will send a connection request to the supplied  
+     * address and return a `ConnectionArc` corresponding to this connection.
+     */
     pub fn connect(&self, addr: &String) -> Result<ConnectionArc, Error> {
         let stdout = stdout();
         //writeln!(&mut stdout.lock(), "Connecting UDPS endpoint to {}", addr);
@@ -206,9 +283,11 @@ impl Endpoint {
     }
 
     /**
-     * Receive loop
-*/
-    pub fn receive_loop(self: EndpointArc) {
+     * Receive loop.
+     * This is started automatically in the background,
+     * and should not be called manually.
+     */
+    pub fn receive_loop(&self) {
         let stdout = stdout();
         let mut running = true;
         while running {
@@ -223,6 +302,9 @@ impl Endpoint {
         //writeln!(&mut stdout.lock(), "Shutting down receive_loop");
     }
 
+    /**
+     * Internal method for handling a specific package after receival.
+     */
     fn handle_package(&self, addr: String, package: Package) {
         let stdout = stdout();
         //writeln!(&mut stdout.lock(), "Package from {} !", addr);
@@ -278,11 +360,7 @@ impl Endpoint {
 
         match package.header.method_type {
             MethodType::Ack => {
-                let id = conv_slice_to_u32(package.data.as_slice());
-                let mut ack_list = self.ack_list.write().unwrap();
-                ack_list.remove(&id).unwrap();
-                //writeln!(&mut stdout.lock(), "Acknowledged package.");
-                // Skip adding Ack packages
+                self.handle_ack(conn_arc, package);
                 return;
             },
             MethodType::Connect => {
@@ -294,18 +372,20 @@ impl Endpoint {
                 connection_list.remove(&conn_arc.id);
                 return;
             }
-            _ => {}
+            _ => {
+                // For now, just pass the package to the connection.
+                // It will automatically be dropped if its a duplicate.
+                conn_arc.push_package(package);
+            }
         };
-
-        // For now, just pass the package to the connection.
-        // It will automatically be dropped if its a duplicate.
-        conn_arc.push_package(package);
     }
 
     /**
-     * Acknowledgement loop
-*/
-    pub fn ack_loop(self: EndpointArc) {
+     * Acknowledgement loop.
+     * This is started automatically in the background,  
+     * and should not be called manually.
+     */
+    pub fn ack_loop(&self) {
         let stdout = stdout();
         let mut iteration_ms = 0u64;
         let mut remove_list = Vec::new();
@@ -341,7 +421,18 @@ impl Endpoint {
                     package_ack.attempts += 1;
                 }
                 for package_id in remove_list.iter() {
-                    ack_list.remove(package_id).unwrap();
+                    let package_ack = ack_list.remove(package_id).unwrap();
+                    if package_ack.cached_package.header.method_type == MethodType::Connect {
+                        // Update connection state to Disconnected
+                        {
+                            let mut connections = self.connection_list.write().unwrap();
+                            let connection_res = connections.remove(&package_ack.cached_package.header.connection_id);
+                            if connection_res.is_some() {
+                                let connection = connection_res.unwrap();
+                                *connection.state.write().unwrap() = ConnectionState::Disconnected;
+                            }
+                        }
+                    }
                 }
             }
             // Clear vectors
@@ -352,10 +443,32 @@ impl Endpoint {
         //writeln!(&mut stdout.lock(),  "Shutting down ack_loop");
     }
 
+    /**
+     * Internal function for handling incoming packages   
+     * with the `Ack` method.
+     */
+    fn handle_ack(&self, conn: ConnectionArc, package: Package) {
+        let package_ack_res = {
+            let mut acks = self.ack_list.write().unwrap();
+            let id = conv_slice_to_u32(package.data.as_slice());
+            acks.remove(&id)
+        };
+        if package_ack_res.is_none() {
+            return;
+        }
+        let package_ack = package_ack_res.unwrap();
+        match package_ack.cached_package.header.method_type {
+            MethodType::Connect => {
+                *conn.state.write().unwrap() = ConnectionState::Connected;
+            },
+            _ => {}
+        };
+    }
+
 
     /**
-     * Sends a package to another Endpoint
-*/
+     * Sends a package, and returns the sent size.
+     */
     pub fn send(&self, package: Package) -> Result<usize, Error> {
         let stdout = stdout();
         //writeln!(&mut stdout.lock(), "Sending package!");
@@ -396,8 +509,8 @@ impl Endpoint {
     }
 
     /**
-     * Receives a package from another Endpoint
-*/
+     * Receives a package, and returns it and the sender address.
+     */
     fn receive(&self) -> Result<(Package, String), Error> {
         let mut data: Vec<u8> = Vec::new();
         data.resize(self.config.buffer_size as usize, 0);
@@ -426,6 +539,10 @@ impl Endpoint {
     }
 }
 
+/**
+ * Implementing `Drop`, which simply  
+ * stops the endpoint.
+ */
 impl Drop for Endpoint {
     fn drop(&mut self) {
         self.stop();

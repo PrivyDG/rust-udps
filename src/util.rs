@@ -19,16 +19,13 @@ pub fn conv_u32_to_bytes(input: &u32) -> [u8; 4] {
 
 pub fn generate_random_bytes(n: usize) -> std::vec::Vec<u8> {
     use rand::prelude::*;
-    use std::vec::*;
-    let mut vec: Vec<u8> = Vec::with_capacity(n);
-    let mut rand = rand::thread_rng();
-    for i in 0..n {
-        vec[i] = rand.gen_range(0, 255);
-    }
-    vec
+    (0..n).map(|_| thread_rng().gen::<u8>()).collect()
 }
 
-
+/**
+ * This macro executes arbitrary code at a given  
+ * maximum frequency.
+ */
 #[macro_export]
 macro_rules! loop_at {
     ($n:expr, $e:expr) => {
